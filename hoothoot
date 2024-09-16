@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""
+    smeargle.py
+    Copyright (C) 2024 Poketch
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+"""
+import math
+import types
+import signal
+import sys
+import time
+import itertools
+import typing
+
+""" Epoch is January 1 1970 00:00:00 UTC """
+EPOCH_YEAR = 1970
+
+""" 
+    https://en.wikipedia.org/wiki/Leap_year
+    in 400 years there are (24 + 24 + 24 + 25 extra days)
+    days in 400 yeas ~ 400 * 365 + (24+24+24+25)
+    days in a year ~ [(400 *3 65) + (97)] / 400
+
+"""
+DAYS_IN_YEAR = 365.2425
+HOURS_IN_DAY = 24
+MINUTES_IN_HOUR = 60
+SECONDS_IN_MINUTE = 60
+
+SECONDS_IN_DAY = HOURS_IN_DAY * MINUTES_IN_HOUR * SECONDS_IN_MINUTE
+SECONDS_IN_HOUR = MINUTES_IN_HOUR * SECONDS_IN_MINUTE
+
+YEAR = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+LEAP_YEAR = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+
+MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "Sepetmber", "October", "November", "December"]
+"""Day of the Week Calculation: https://cs.uwaterloo.ca/~alopez-o/math-faq/node73.html"""
+DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+
+def day_of_the_week(day: int, month: int, year: int) -> str:
+    
+    month = (month + 11) % 12
+    if month == 0: 
+        month = 12
+
+    Y = (year % 100) - 1 if month > 10 else year % 100
+    idx = (day + math.floor(2.6*month - 0.2) - 2*(year//100) + Y + math.floor(Y/4) + math.floor((year//100)/4)) % 7
+
+    return DAYS[idx]
+
+def is_leap_year(year: int) -> bool:
+    return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+
+def get_date(in_time: int | None = None) -> str:
+
+    t = int(time.time()) if in_time is None else in_time
+
+    days = t // SECONDS_IN_DAY
+
+    years_passed, rem = divmod(days, DAYS_IN_YEAR)
+    current_year = int(years_passed + EPOCH_YEAR)
+
+    days = round(rem) + 1 #days are complete days so add 1 to get the current day
+
+    month, day = None, None
+    if (is_leap_year(current_year)):
+        month, day = next(filter(lambda x: x[1]<31, enumerate(itertools.accumulate(LEAP_YEAR, lambda x,y: x-y, initial=days))))
+    else:
+        month, day = next(filter(lambda x: x[1]<31, enumerate(itertools.accumulate(YEAR, lambda x,y: x-y, initial=days))))
+
+    return f"{day_of_the_week(day, month, current_year)}, {day} {MONTHS[month]}, {current_year}"
+
+def get_time(in_time: int | None = None) -> str:
+
+    t = int(time.time()) if in_time is None else in_time
+
+    _, rem = divmod(t , SECONDS_IN_DAY)
+    hours, rem = divmod(rem, SECONDS_IN_HOUR)
+    minutes, seconds = divmod(rem, SECONDS_IN_MINUTE)
+
+    return f"{hours:02}:{minutes:02}:{seconds:02}"
+
+def cleanup() -> None:
+    # fix cursor
+    print(f"\033[?25h")
+
+def signal_handler(signum: int, _frame: types.FrameType | None) -> typing.NoReturn:
+    signal.signal(signum, signal.SIG_IGN) # ignore additional signals
+    cleanup() # give your process a chance to clean up
+    sys.exit(0)
+
+if __name__ == "__main__": 
+
+    signal.signal(signal.SIGINT, signal_handler) # register the signal with the signal handler first
+
+    date = get_date()
+    time_now = get_time() 
+    print(f"Date: {date}")
+    print(f"Time: {time_now}")
+    while True:
+        
+        date = get_date()
+        time_now = get_time() 
+        print(f"\033[?25l")
+        print(f"\x1b[3FDate: {date}") # move cursor so it replaces text
+        print(f"Time: {time_now}") # move cursor so it replaces text
+        time.sleep(0.25) # sleep so you don't fry your pc 
